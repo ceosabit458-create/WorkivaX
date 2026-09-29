@@ -783,4 +783,411 @@ def msg(m):
             num = parts[0]
             amt = float(parts[1])
 
-            if amt < MIN_W 
+            if amt < MIN_W or amt > u["bal"]:
+                return bot.send_message(
+                    uid,
+                    f"❌ Minimum withdrawal ৳{MIN_W:.2f} "
+                    f"এবং আপনার balance ৳{u['bal']:.2f}"
+                )
+
+            u["bal"] -= amt
+            save_db(db)
+
+            bot.send_message(
+                uid,
+                "✅ আপনার withdrawal request জমা হয়েছে!"
+            )
+
+            bot.send_message(
+                ADMIN_ID,
+                f"🔔 <b>New Withdrawal</b>\n"
+                f"👤 User: <code>{uid}</code>\n"
+                f"💳 Method: {method}\n"
+                f"📱 Number: <code>{num}</code>\n"
+                f"💵 Amount: ৳{amt:.2f}"
+            )
+
+        except:
+            bot.send_message(
+                uid,
+                "❌ Format ভুল!\n"
+                "উদাহরণ: 01700000000 50"
+            )
+        return
+
+    # Profile
+    if txt == "👤 প্রোফাইল":
+        premium_status = (
+            f"⭐ Premium: Active\n"
+            f"📅 Valid Until: {u.get('premium_until', '')}\n"
+            f"⏳ Days Left: {premium_days_left(u)}"
+            if is_premium(u)
+            else "⭐ Premium: Inactive"
+        )
+
+        bot.send_message(
+            uid,
+            f"👤 <b>আপনার প্রোফাইল</b>\n\n"
+            f"🆔 ID: <code>{uid}</code>\n"
+            f"💵 Earnings Balance: ৳{u['bal']:.2f}\n"
+            f"💳 Deposit Balance: ৳{u['dep']:.2f}\n"
+            f"👥 Referrals: {u['refs']} জন\n\n"
+            f"{premium_status}"
+        )
+        return
+
+    # Watch Ad
+    if txt == "📺 Watch Ad":
+        kb = types.InlineKeyboardMarkup()
+
+        kb.add(
+            types.InlineKeyboardButton(
+                "🔗 Open Ad",
+                url=ADSTERRA
+            )
+        )
+
+        kb.add(
+            types.InlineKeyboardButton(
+                f"🎁 Claim ৳{AD_REWARD:.2f}",
+                callback_data="vad"
+            )
+        )
+
+        bot.send_message(
+            uid,
+            f"📺 Ad দেখুন এবং claim করুন।\n"
+            f"💰 প্রতি Ad: ৳{AD_REWARD:.2f}\n"
+            f"⏰ Free: {FREE_DAILY_AD_LIMIT} Ads / 24h\n⭐ Premium: {PREMIUM_DAILY_AD_LIMIT} Ads / 24h",
+            reply_markup=kb
+        )
+        return
+
+    # Premium
+    if txt == "⭐ Premium":
+        if is_premium(u):
+            bot.send_message(
+                uid,
+                f"⭐ <b>Premium Active</b>\n\n"
+                f"📅 Valid Until: {u['premium_until']}\n"
+                f"⏳ Days Left: {premium_days_left(u)}\n\n"
+                f"💰 Premium Telegram Join Tasks: প্রতি Join-এ ৳{PREMIUM_JOIN_REWARD:.2f}"
+            )
+            return
+
+        if u.get("premium_pending", False):
+            bot.send_message(
+                uid,
+                "⏳ আপনার Premium payment verification pending আছে।"
+            )
+            return
+
+        kb = types.InlineKeyboardMarkup()
+
+        kb.add(
+            types.InlineKeyboardButton(
+                "💳 Pay $1 & Activate",
+                callback_data="premium_proof"
+            )
+        )
+
+        bot.send_message(
+            uid,
+            f"⭐ <b>WorkivaX Premium</b>\n\n"
+            f"💵 Price: ${PREMIUM_PRICE_USD:.2f}\n"
+            f"📅 Duration: {PREMIUM_DAYS} Days\n\n"
+            f"Premium Members পাবেন:\n"
+            f"📲 Telegram Join Tasks\n"
+            f"💰 প্রতি Join-এ ৳{PREMIUM_JOIN_REWARD:.2f}\n"
+            f"🎯 Additional Premium Tasks & Rewards\n\n"
+            f"{PREMIUM_PAYMENT_INFO}",
+            reply_markup=kb
+        )
+        return
+
+    # Work / tasks
+    if txt == "🛠️ কাজ করুন":
+        acts = []
+
+        for x in db["tasks"]:
+            if (
+                x["status"] == "active"
+                and x["done"] < x["qty"]
+                and x["id"] not in u["done"]
+            ):
+                if x.get("premium", False):
+                    if is_premium(u):
+                        acts.append(x)
+                else:
+                    acts.append(x)
+
+        if not acts:
+            return bot.send_message(
+                uid,
+                "❌ এই মুহূর্তে আপনার জন্য কোনো কাজ উপলব্ধ নেই।"
+            )
+
+        kb = types.InlineKeyboardMarkup()
+
+        for x in acts:
+            label = (
+                "⭐ "
+                if x.get("premium", False)
+                else ""
+            )
+
+            kb.add(
+                types.InlineKeyboardButton(
+                    f"{label}[{x['type']}] {x['title']} "
+                    f"(৳{x['reward']:.2f})",
+                    callback_data=f"vt_{x['id']}"
+                )
+            )
+
+        bot.send_message(
+            uid,
+            "📋 আপনার জন্য available tasks:",
+            reply_markup=kb
+        )
+        return
+
+    # Promote
+    if txt == "📢 প্রমোট করুন":
+        if u["dep"] < 1.0:
+            return bot.send_message(
+                uid,
+                f"❌ পর্যাপ্ত deposit balance নেই!\n"
+                f"বর্তমান: ৳{u['dep']:.2f}"
+        )
+
+        kb = types.InlineKeyboardMarkup(row_width=2)
+
+        kb.add(
+            types.InlineKeyboardButton(
+                "YouTube",
+                callback_data="tp_YouTube"
+            ),
+            types.InlineKeyboardButton(
+                "TikTok",
+                callback_data="tp_TikTok"
+            ),
+            types.InlineKeyboardButton(
+                "Facebook",
+                callback_data="tp_Facebook"
+            ),
+            types.InlineKeyboardButton(
+                "Telegram Join",
+                callback_data="tp_Telegram"
+            ),
+            types.InlineKeyboardButton(
+                "Custom",
+                callback_data="tp_Custom"
+            )
+        )
+
+        bot.send_message(
+            uid,
+            "📢 Task category বেছে নিন:",
+            reply_markup=kb
+        )
+        return
+
+    # Referral
+    if txt == "🔗 Refer & Earn":
+        bot_un = bot.get_me().username
+
+        bot.send_message(
+            uid,
+            f"🔗 <b>আপনার Referral Link:</b>\n"
+            f"<code>https://t.me/{bot_un}?start={uid}</code>\n\n"
+            f"🎁 প্রতি successful referral-এ ৳{REFERRAL_REWARD:.2f} bonus!"
+        )
+        return
+
+    # Deposit
+    if txt == "📥 ডিপোজিট":
+        bot.send_message(
+            uid,
+            "📥 <b>ডিপোজিট করার নিয়ম:</b>\n\n"
+            "বিকাশ/নগদ (Personal): <code>01700000000</code>\n\n"
+            "টাকা পাঠানোর পর Transaction ID এবং আপনার User ID "
+            "Admin/Support-এ দিন: @WorkivaX_Support"
+        )
+        return
+
+    # Withdraw
+    if txt == "🏧 টাকা তুলুন":
+        if u["bal"] < MIN_W:
+            return bot.send_message(
+                uid,
+                f"⚠️ Minimum withdrawal ৳{MIN_W:.2f}\n"
+                f"আপনার balance: ৳{u['bal']:.2f}"
+            )
+
+        kb = types.InlineKeyboardMarkup()
+
+        kb.add(
+            types.InlineKeyboardButton(
+                "bKash",
+                callback_data="w_bKash"
+            ),
+            types.InlineKeyboardButton(
+                "Nagad",
+                callback_data="w_Nagad"
+            )
+        )
+
+        bot.send_message(
+            uid,
+            "পেমেন্ট method select করুন:",
+            reply_markup=kb
+        )
+        return
+
+    # Admin panel
+    if txt == "👨‍✈️ Admin Panel" and uid == ADMIN_ID:
+        bot.send_message(
+            uid,
+            "👨‍✈️ <b>Admin Panel</b>\n\n"
+            "Deposit দিতে:\n"
+            "<code>/addbalance USER_ID AMOUNT</code>\n\n"
+            "Premium manually দিতে:\n"
+            "<code>/addpremium USER_ID DAYS</code>\n\n"
+            "Premium remove করতে:\n"
+            "<code>/removepremium USER_ID</code>"
+        )
+        return
+
+
+# ==================== ৬. ADMIN COMMANDS ====================
+@bot.message_handler(commands=["addbalance"])
+def addbal(m):
+    if m.from_user.id != ADMIN_ID:
+        return
+
+    try:
+        _, tuid, amt = m.text.split()
+
+        db = load_db()
+        u = get_user(db, tuid)
+
+        amount = float(amt)
+
+        if amount <= 0:
+            raise Exception
+
+        u["dep"] += amount
+
+        save_db(db)
+
+        bot.send_message(
+            m.chat.id,
+            f"✅ User {tuid}-কে ৳{amount:.2f} deposit দেওয়া হয়েছে।"
+        )
+
+        bot.send_message(
+            int(tuid),
+            f"🎉 আপনার account-এ ৳{amount:.2f} deposit balance যুক্ত হয়েছে!"
+        )
+
+    except:
+        bot.send_message(
+            m.chat.id,
+            "❌ Format:\n/addbalance USER_ID AMOUNT"
+        )
+
+
+@bot.message_handler(commands=["addpremium"])
+def addpremium(m):
+    if m.from_user.id != ADMIN_ID:
+        return
+
+    try:
+        _, tuid, days = m.text.split()
+
+        tuid = int(tuid)
+        days = int(days)
+
+        if days <= 0:
+            raise Exception
+
+        db = load_db()
+        u = get_user(db, tuid)
+
+        expiry = datetime.date.today() + datetime.timedelta(days=days)
+
+        u["premium"] = True
+        u["premium_until"] = str(expiry)
+        u["premium_pending"] = False
+
+        save_db(db)
+
+        bot.send_message(
+            m.chat.id,
+            f"✅ User {tuid}-এর Premium {days} দিনের জন্য active করা হয়েছে।"
+        )
+
+        bot.send_message(
+            tuid,
+            f"🎉 <b>Premium Activated!</b>\n\n"
+            f"📅 Valid Until: {expiry}\n"
+            f"⏳ Duration: {days} Days"
+        )
+
+    except:
+        bot.send_message(
+            m.chat.id,
+            "❌ Format:\n/addpremium USER_ID DAYS"
+        )
+
+
+@bot.message_handler(commands=["removepremium"])
+def removepremium(m):
+    if m.from_user.id != ADMIN_ID:
+        return
+
+    try:
+        _, tuid = m.text.split()
+
+        db = load_db()
+        u = get_user(db, tuid)
+
+        u["premium"] = False
+        u["premium_until"] = ""
+        u["premium_pending"] = False
+
+        save_db(db)
+
+        bot.send_message(
+            m.chat.id,
+            f"✅ User {tuid}-এর Premium removed."
+        )
+
+        bot.send_message(
+            int(tuid),
+            "⚠️ আপনার Premium Membership deactivated করা হয়েছে।"
+        )
+
+    except:
+        bot.send_message(
+            m.chat.id,
+            "❌ Format:\n/removepremium USER_ID"
+        )
+
+
+# ==================== ৭. BOT LOOP ====================
+print("WorkivaX Bot is running smoothly...")
+
+while True:
+    try:
+        bot.infinity_polling(
+            timeout=60,
+            long_polling_timeout=60
+        )
+
+    except Exception as e:
+        print(
+            f"Network Connection Error: {e}. "
+            f"Reconnecting in 5 seconds..."
+        )
+        time.sleep(5)
